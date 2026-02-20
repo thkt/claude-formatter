@@ -48,11 +48,6 @@ fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
 }
 
 fn main() {
-    let config = Config::load();
-    if !config.enabled {
-        return;
-    }
-
     let mut input_str = String::new();
     if let Err(e) = io::stdin()
         .take(MAX_INPUT_SIZE)
@@ -84,6 +79,11 @@ fn main() {
             return;
         }
     };
+
+    let config = Config::default().with_project_overrides(file_path);
+    if !config.enabled {
+        return;
+    }
 
     match select_formatter(&config, file_path) {
         Some(Formatter::Oxfmt) => oxfmt::format(file_path),

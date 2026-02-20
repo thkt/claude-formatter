@@ -1,16 +1,12 @@
 use serde::Deserialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-#[derive(Deserialize)]
-#[serde(default)]
 pub struct Config {
     pub enabled: bool,
     pub formatters: FormattersConfig,
 }
 
-#[derive(Deserialize)]
-#[serde(default)]
 pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,
@@ -34,46 +30,71 @@ impl Default for Config {
     }
 }
 
+#[derive(Deserialize)]
+struct ProjectConfig {
+    enabled: Option<bool>,
+    formatters: Option<ProjectFormattersConfig>,
+}
+
+#[derive(Deserialize)]
+struct ProjectFormattersConfig {
+    biome: Option<bool>,
+    oxfmt: Option<bool>,
+}
+
+const PROJECT_CONFIG_NAME: &str = ".claude-formatter.json";
+
 impl Config {
-    pub fn load() -> Self {
-        let config_path = match Self::config_search_paths(std::env::current_exe().ok().as_deref())
-            .into_iter()
-            .find(|p| p.exists())
-        {
-            Some(p) => p,
-            None => return Config::default(),
+    pub fn with_project_overrides(self, file_path: &str) -> Self {
+        let Some(config_path) = Self::find_project_config(file_path) else {
+            return self;
         };
 
-        match fs::read_to_string(&config_path) {
-            Ok(content) => match serde_json::from_str::<Config>(&content) {
-                Ok(config) => config,
-                Err(e) => {
-                    eprintln!("formatter: invalid config at {:?}: {}", config_path, e);
-                    Config::default()
-                }
-            },
+        let content = match fs::read_to_string(&config_path) {
+            Ok(c) => c,
             Err(e) => {
-                eprintln!("formatter: cannot read config {:?}: {}", config_path, e);
-                Config::default()
+                eprintln!(
+                    "formatter: cannot read project config {:?}: {}",
+                    config_path, e
+                );
+                return self;
+            }
+        };
+
+        match serde_json::from_str::<ProjectConfig>(&content) {
+            Ok(project) => self.merge(project),
+            Err(e) => {
+                eprintln!("formatter: invalid project config {:?}: {}", config_path, e);
+                self
             }
         }
     }
 
-    fn config_search_paths(exe_path: Option<&std::path::Path>) -> Vec<PathBuf> {
-        let mut paths = Vec::new();
-
-        if let Some(config_dir) = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        {
-            paths.push(config_dir.join("claude-formatter/config.json"));
+    fn merge(mut self, project: ProjectConfig) -> Self {
+        if let Some(enabled) = project.enabled {
+            self.enabled = enabled;
         }
-
-        if let Some(exe_dir) = exe_path.and_then(|p| p.parent()) {
-            paths.push(exe_dir.join("config.json"));
+        if let Some(pf) = project.formatters {
+            if let Some(v) = pf.biome {
+                self.formatters.biome = v;
+            }
+            if let Some(v) = pf.oxfmt {
+                self.formatters.oxfmt = v;
+            }
         }
+        self
+    }
 
-        paths
+    fn find_project_config(file_path: &str) -> Option<PathBuf> {
+        let mut dir = Path::new(file_path).parent();
+        while let Some(d) = dir {
+            if d.join(".git").exists() {
+                let candidate = d.join(PROJECT_CONFIG_NAME);
+                return candidate.exists().then_some(candidate);
+            }
+            dir = d.parent();
+        }
+        None
     }
 }
 
@@ -90,60 +111,110 @@ mod tests {
     }
 
     #[test]
-    fn parse_disabled_config() {
-        let json = r#"{"enabled": false}"#;
-        let config: Config = serde_json::from_str(json).unwrap();
-        assert!(!config.enabled);
+    fn find_project_config_at_git_root() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        let config_path = tmp.path().join(".claude-formatter.json");
+        fs::write(&config_path, r#"{"formatters":{"oxfmt":false}}"#).unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let result = Config::find_project_config(file_path.to_str().unwrap());
+        assert_eq!(result, Some(config_path));
     }
 
     #[test]
-    fn parse_empty_config_uses_defaults() {
-        let json = "{}";
-        let config: Config = serde_json::from_str(json).unwrap();
+    fn find_project_config_missing_returns_none() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let result = Config::find_project_config(file_path.to_str().unwrap());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn find_project_config_no_git_returns_none() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config_path = tmp.path().join(".claude-formatter.json");
+        fs::write(config_path, "{}").unwrap();
+
+        let file_path = tmp.path().join("app.ts");
+        let result = Config::find_project_config(file_path.to_str().unwrap());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn merge_partial_formatters_override() {
+        let base = Config::default();
+        let project: ProjectConfig =
+            serde_json::from_str(r#"{"formatters": {"oxfmt": false}}"#).unwrap();
+
+        let merged = base.merge(project);
+        assert!(!merged.formatters.oxfmt);
+        assert!(merged.formatters.biome);
+    }
+
+    #[test]
+    fn merge_enabled_override() {
+        let base = Config::default();
+        let project: ProjectConfig = serde_json::from_str(r#"{"enabled": false}"#).unwrap();
+
+        let merged = base.merge(project);
+        assert!(!merged.enabled);
+        assert!(merged.formatters.biome);
+    }
+
+    #[test]
+    fn merge_empty_project_config_no_change() {
+        let base = Config::default();
+        let project: ProjectConfig = serde_json::from_str(r#"{}"#).unwrap();
+
+        let merged = base.merge(project);
+        assert!(merged.enabled);
+        assert!(merged.formatters.biome);
+        assert!(merged.formatters.oxfmt);
+    }
+
+    #[test]
+    fn with_project_overrides_applies_config() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::write(
+            tmp.path().join(".claude-formatter.json"),
+            r#"{"formatters":{"oxfmt":false}}"#,
+        )
+        .unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(!config.formatters.oxfmt);
+        assert!(config.formatters.biome);
+    }
+
+    #[test]
+    fn with_project_overrides_malformed_json_returns_defaults() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::write(
+            tmp.path().join(".claude-formatter.json"),
+            "not valid json",
+        )
+        .unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
         assert!(config.enabled);
         assert!(config.formatters.biome);
         assert!(config.formatters.oxfmt);
     }
 
     #[test]
-    fn parse_formatters_config() {
-        let json = r#"{"formatters": {"biome": false}}"#;
-        let config: Config = serde_json::from_str(json).unwrap();
-        assert!(!config.formatters.biome);
-        assert!(config.formatters.oxfmt);
-    }
+    fn with_project_overrides_no_config_returns_unchanged() {
+        let tmp = tempfile::TempDir::new().unwrap();
 
-    #[test]
-    fn parse_oxfmt_disabled() {
-        let json = r#"{"formatters": {"oxfmt": false}}"#;
-        let config: Config = serde_json::from_str(json).unwrap();
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
         assert!(config.formatters.biome);
-        assert!(!config.formatters.oxfmt);
-    }
-
-    #[test]
-    fn config_search_paths_xdg_first() {
-        let paths = Config::config_search_paths(Some(std::path::Path::new("/usr/bin/formatter")));
-        let xdg_idx = paths
-            .iter()
-            .position(|p| p.to_string_lossy().contains("claude-formatter"));
-        let exe_idx = paths
-            .iter()
-            .position(|p| p.to_string_lossy().contains("/usr/"));
-        match (xdg_idx, exe_idx) {
-            (Some(x), Some(e)) => {
-                assert!(x < e, "XDG should come before exe-adjacent");
-            }
-            _ => panic!("expected both XDG and exe-adjacent paths (is HOME set?)"),
-        }
-    }
-
-    #[test]
-    fn config_search_paths_no_cwd() {
-        let paths = Config::config_search_paths(Some(std::path::Path::new("/usr/bin/formatter")));
-        assert!(
-            !paths.contains(&PathBuf::from("config.json")),
-            "CWD config.json should not be in search paths"
-        );
+        assert!(config.formatters.oxfmt);
     }
 }
