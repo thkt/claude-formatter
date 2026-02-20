@@ -11,6 +11,12 @@ PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using oxfm
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install thkt/tap/formatter
+```
+
 ### From Source
 
 ```bash
@@ -88,10 +94,10 @@ At least one of:
 
 ## Supported File Types
 
-| Formatter | Extensions |
-|-----------|------------|
-| oxfmt | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.json5` `.css` `.scss` `.less` `.html` `.vue` `.yaml` `.yml` `.toml` `.md` `.mdx` `.graphql` `.gql` |
-| biome | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.css` |
+| Formatter | Extensions                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| oxfmt     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.json5` `.css` `.scss` `.less` `.html` `.vue` `.yaml` `.yml` `.toml` `.md` `.mdx` `.graphql` `.gql` |
+| biome     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.css`                                                                                               |
 
 ## How It Works
 
@@ -100,19 +106,7 @@ At least one of:
 
 ## Configuration
 
-Create `~/.config/claude-formatter/config.json`:
-
-```json
-{
-  "enabled": true,
-  "formatters": {
-    "oxfmt": true,
-    "biome": true
-  }
-}
-```
-
-To use biome only:
+Place `.claude-formatter.json` at your project's git root. Only specified fields override defaults (all formatters enabled).
 
 ```json
 {
@@ -121,6 +115,16 @@ To use biome only:
   }
 }
 ```
+
+This disables oxfmt for this project, using biome only. Unspecified fields keep defaults.
+
+| Field              | Default | Description                       |
+| ------------------ | ------- | --------------------------------- |
+| `enabled`          | `true`  | Enable/disable formatter entirely |
+| `formatters.oxfmt` | `true`  | Enable oxfmt                      |
+| `formatters.biome` | `true`  | Enable biome                      |
+
+No config file = all formatters enabled (zero-config by default).
 
 ## Exit Codes
 
