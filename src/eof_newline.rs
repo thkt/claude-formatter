@@ -20,7 +20,6 @@ pub fn ensure(file_path: &str) -> bool {
         return false;
     }
 
-    // Binary detection: NUL byte in first 512 bytes.
     if content[..content.len().min(512)].contains(&0) {
         return false;
     }

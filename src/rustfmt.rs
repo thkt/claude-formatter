@@ -9,7 +9,6 @@ pub fn is_formattable(path: &str) -> bool {
     has_extension(path, EXTENSIONS)
 }
 
-/// Checks global PATH — rustfmt is distributed via rustup, not node_modules.
 pub fn is_available(_file_path: &str) -> bool {
     Command::new("rustfmt")
         .arg("--version")
