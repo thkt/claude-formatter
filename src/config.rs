@@ -1,4 +1,4 @@
-//! Configuration loading and merging for claude-formatter.
+//! Configuration loading and merging.
 //!
 //! Supports project-local `.claude-formatter.json` at the git root,
 //! with partial override semantics on top of all-enabled defaults.
@@ -8,13 +8,11 @@ use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
-/// Runtime configuration for the formatter hook.
 pub struct Config {
     pub enabled: bool,
     pub formatters: FormattersConfig,
 }
 
-/// Per-formatter enable/disable toggles. All default to `true`.
 pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,

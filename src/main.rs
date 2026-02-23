@@ -13,7 +13,6 @@ use config::Config;
 use serde::Deserialize;
 use std::io::{self, Read};
 
-/// Safety limit for stdin input (10 MB). Hook payloads are typically < 1 KB.
 const MAX_INPUT_SIZE: u64 = 10_000_000;
 
 #[derive(Debug, Deserialize, PartialEq)]

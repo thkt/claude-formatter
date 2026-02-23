@@ -19,8 +19,7 @@ pub fn is_available(file_path: &str) -> bool {
     Command::new(resolve_bin("biome", file_path))
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 pub fn format(file_path: &str) {
