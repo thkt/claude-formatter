@@ -1,3 +1,5 @@
+//! Biome formatter integration (JS/TS/JSON/CSS).
+
 use crate::resolve::resolve_bin;
 use std::path::Path;
 use std::process::Command;
@@ -24,52 +26,38 @@ pub fn is_available(file_path: &str) -> bool {
 pub fn format(file_path: &str) {
     let biome = resolve_bin("biome", file_path);
 
-    let output = Command::new(&biome)
+    // Try modern invocation first (biome check --write --linter-enabled=false).
+    // Fall back to legacy (biome format --write) on any non-zero exit, which
+    // handles older biome versions that don't support --linter-enabled.
+    match Command::new(&biome)
         .args(["check", "--write", "--linter-enabled=false", file_path])
-        .output();
+        .output()
+    {
+        Ok(o) if o.status.success() => return,
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("formatter: biome: {}", e);
+            return;
+        }
+    }
 
-    match output {
-        Ok(o) if o.status.success() => {}
-        Ok(o) => {
+    match Command::new(&biome)
+        .args(["format", "--write", file_path])
+        .output()
+    {
+        Ok(o) if !o.status.success() => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            // biome does not use distinct exit codes for flag errors vs formatting errors.
-            // These patterns detect when --linter-enabled is unsupported (older biome).
-            let is_flag_error = stderr.contains("unexpected argument")
-                || stderr.contains("unrecognized option")
-                || stderr.contains("unknown option");
-
-            if !is_flag_error {
-                if !stderr.is_empty() {
-                    eprintln!(
-                        "formatter: biome: {}",
-                        stderr.lines().next().unwrap_or("(no details)")
-                    );
-                }
-                return;
-            }
-
-            match Command::new(&biome)
-                .args(["format", "--write", file_path])
-                .output()
-            {
-                Ok(o) if !o.status.success() => {
-                    let stderr = String::from_utf8_lossy(&o.stderr);
-                    if !stderr.is_empty() {
-                        eprintln!(
-                            "formatter: biome: {}",
-                            stderr.lines().next().unwrap_or("(no details)")
-                        );
-                    }
-                }
-                Err(e) => {
-                    eprintln!("formatter: biome: {}", e);
-                }
-                _ => {}
+            if !stderr.is_empty() {
+                eprintln!(
+                    "formatter: biome: {}",
+                    stderr.lines().next().unwrap_or("(no details)")
+                );
             }
         }
         Err(e) => {
             eprintln!("formatter: biome: {}", e);
         }
+        _ => {}
     }
 }
 
@@ -115,5 +103,33 @@ mod tests {
     #[test]
     fn format_nonexistent_file_does_not_panic() {
         format("/nonexistent/path/to/file.ts");
+    }
+
+    #[test]
+    fn format_fixes_json() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Check global PATH since temp dir has no node_modules
+        let available = Command::new("biome")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !available {
+            eprintln!("biome not available, skipping");
+            return;
+        }
+
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("test.json");
+        fs::write(&file, "{  \"a\":1,  \"b\"  :2  }\n").unwrap();
+
+        format(file.to_str().unwrap());
+
+        let content = fs::read_to_string(&file).unwrap();
+        assert!(
+            content.contains("\"a\": 1"),
+            "Expected formatted JSON, got: {content}"
+        );
     }
 }

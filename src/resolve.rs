@@ -1,6 +1,28 @@
+//! Path resolution utilities: git root discovery and local binary lookup.
+
 use std::path::{Path, PathBuf};
 
 const MAX_TRAVERSAL_DEPTH: usize = 20;
+
+pub fn find_git_root(file_path: &str) -> Option<PathBuf> {
+    let stop_at = std::env::var_os("HOME").map(PathBuf::from);
+    let mut dir = Path::new(file_path).parent();
+    let mut depth = 0;
+    while let Some(d) = dir {
+        if depth >= MAX_TRAVERSAL_DEPTH {
+            break;
+        }
+        if d.join(".git").exists() {
+            return Some(d.to_path_buf());
+        }
+        if stop_at.as_deref() == Some(d) {
+            break;
+        }
+        dir = d.parent();
+        depth += 1;
+    }
+    None
+}
 
 pub fn resolve_bin(name: &str, file_path: &str) -> PathBuf {
     let stop_at = match std::env::var_os("HOME").map(PathBuf::from) {

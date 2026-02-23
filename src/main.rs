@@ -1,12 +1,19 @@
+//! Claude Code PostToolUse hook that auto-formats files on Write/Edit/MultiEdit.
+//!
+//! Reads hook JSON from stdin, selects the appropriate formatter based on file
+//! extension and availability, then formats the file in-place.
+
 mod biome;
 mod config;
 mod oxfmt;
 mod resolve;
+mod rustfmt;
 
 use config::Config;
 use serde::Deserialize;
 use std::io::{self, Read};
 
+/// Safety limit for stdin input (10 MB). Hook payloads are typically < 1 KB.
 const MAX_INPUT_SIZE: u64 = 10_000_000;
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -33,9 +40,17 @@ struct ToolInput {
 enum Formatter {
     Oxfmt,
     Biome,
+    Rustfmt,
 }
 
+/// Priority: rustfmt (.rs only) > oxfmt (broad, faster) > biome (fallback).
 fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
+    if config.formatters.rustfmt
+        && rustfmt::is_formattable(file_path)
+        && rustfmt::is_available(file_path)
+    {
+        return Some(Formatter::Rustfmt);
+    }
     if config.formatters.oxfmt && oxfmt::is_formattable(file_path) && oxfmt::is_available(file_path)
     {
         return Some(Formatter::Oxfmt);
@@ -45,6 +60,72 @@ fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
         return Some(Formatter::Biome);
     }
     None
+}
+
+fn run(input_str: &str) {
+    let input: HookInput = match serde_json::from_str(input_str) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("formatter: invalid hook input: {}", e);
+            return;
+        }
+    };
+
+    if input.tool_name == ToolName::Other {
+        return;
+    }
+
+    let raw_path = match &input.tool_input.file_path {
+        Some(p) if !p.is_empty() => p.as_str(),
+        _ => {
+            eprintln!(
+                "formatter: {:?} without file_path, skipping",
+                input.tool_name
+            );
+            return;
+        }
+    };
+
+    let canonical = match std::path::Path::new(raw_path).canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("formatter: cannot resolve path {}: {}", raw_path, e);
+            return;
+        }
+    };
+
+    if let Ok(cwd) = std::env::current_dir() {
+        if !canonical.starts_with(&cwd) {
+            eprintln!("formatter: file outside project directory, skipping");
+            return;
+        }
+    }
+
+    let file_path = canonical.to_string_lossy();
+    let file_path = file_path.as_ref();
+
+    let config = Config::default().with_project_overrides(file_path);
+    if !config.enabled {
+        eprintln!("formatter: disabled by project config, skipping");
+        return;
+    }
+
+    match select_formatter(&config, file_path) {
+        Some(Formatter::Oxfmt) => oxfmt::format(file_path),
+        Some(Formatter::Biome) => biome::format(file_path),
+        Some(Formatter::Rustfmt) => rustfmt::format(file_path),
+        None => {
+            if rustfmt::is_formattable(file_path)
+                || oxfmt::is_formattable(file_path)
+                || biome::is_formattable(file_path)
+            {
+                eprintln!(
+                    "formatter: supported file but no formatter available: {}",
+                    file_path
+                );
+            }
+        }
+    }
 }
 
 fn main() {
@@ -57,39 +138,7 @@ fn main() {
         return;
     }
 
-    let input: HookInput = match serde_json::from_str(&input_str) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("formatter: invalid hook input: {}", e);
-            return;
-        }
-    };
-
-    if input.tool_name == ToolName::Other {
-        return;
-    }
-
-    let file_path = match &input.tool_input.file_path {
-        Some(p) if !p.is_empty() => p.as_str(),
-        _ => {
-            eprintln!(
-                "formatter: {:?} without file_path, skipping",
-                input.tool_name
-            );
-            return;
-        }
-    };
-
-    let config = Config::default().with_project_overrides(file_path);
-    if !config.enabled {
-        return;
-    }
-
-    match select_formatter(&config, file_path) {
-        Some(Formatter::Oxfmt) => oxfmt::format(file_path),
-        Some(Formatter::Biome) => biome::format(file_path),
-        None => {}
-    }
+    run(&input_str);
 }
 
 #[cfg(test)]
@@ -137,34 +186,36 @@ mod tests {
         }
     }
 
-    fn config_both_enabled() -> Config {
+    fn config_all_enabled() -> Config {
         Config {
             enabled: true,
             formatters: config::FormattersConfig {
                 biome: true,
                 oxfmt: true,
+                rustfmt: true,
             },
         }
     }
 
     #[test]
     fn select_formatter_non_formattable_returns_none() {
-        let config = config_both_enabled();
-        assert_eq!(select_formatter(&config, "src/main.rs"), None);
+        let config = config_all_enabled();
         assert_eq!(select_formatter(&config, "Makefile"), None);
         assert_eq!(select_formatter(&config, "Dockerfile"), None);
     }
 
     #[test]
-    fn select_formatter_both_disabled_returns_none() {
+    fn select_formatter_all_disabled_returns_none() {
         let config = Config {
             enabled: true,
             formatters: config::FormattersConfig {
                 biome: false,
                 oxfmt: false,
+                rustfmt: false,
             },
         };
         assert_eq!(select_formatter(&config, "src/app.ts"), None);
+        assert_eq!(select_formatter(&config, "src/main.rs"), None);
     }
 
     #[test]
@@ -174,6 +225,7 @@ mod tests {
             formatters: config::FormattersConfig {
                 biome: true,
                 oxfmt: false,
+                rustfmt: true,
             },
         };
         assert_ne!(
@@ -189,9 +241,52 @@ mod tests {
             formatters: config::FormattersConfig {
                 biome: true,
                 oxfmt: false,
+                rustfmt: true,
             },
         };
         // .yaml is oxfmt-only, biome doesn't support it
         assert_eq!(select_formatter(&config, "config.yaml"), None);
+    }
+
+    #[test]
+    fn select_formatter_rs_selects_rustfmt() {
+        let config = config_all_enabled();
+        assert_eq!(
+            select_formatter(&config, "src/main.rs"),
+            Some(Formatter::Rustfmt)
+        );
+    }
+
+    #[test]
+    fn select_formatter_rustfmt_disabled_returns_none_for_rs() {
+        let config = Config {
+            enabled: true,
+            formatters: config::FormattersConfig {
+                biome: true,
+                oxfmt: true,
+                rustfmt: false,
+            },
+        };
+        assert_eq!(select_formatter(&config, "src/main.rs"), None);
+    }
+
+    #[test]
+    fn run_invalid_json_does_not_panic() {
+        run("not valid json");
+    }
+
+    #[test]
+    fn run_other_tool_skips() {
+        run(r#"{"tool_name": "Read", "tool_input": {}}"#);
+    }
+
+    #[test]
+    fn run_missing_file_path_skips() {
+        run(r#"{"tool_name": "Write", "tool_input": {}}"#);
+    }
+
+    #[test]
+    fn run_nonexistent_file_skips() {
+        run(r#"{"tool_name": "Write", "tool_input": {"file_path": "/nonexistent/path.ts"}}"#);
     }
 }

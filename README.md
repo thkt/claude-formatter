@@ -1,12 +1,13 @@
 # claude-formatter
 
-PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using oxfmt or biome.
+PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using rustfmt, oxfmt, or biome.
 
 ## Features
 
-- **oxfmt**: Rust-powered Prettier-compatible formatter (preferred)
-- **biome**: Code formatting + organizeImports
-- **Auto-detection**: Uses oxfmt if available, falls back to biome
+- **rustfmt**: Rust source formatting (highest priority for `.rs` files)
+- **oxfmt**: Rust-powered Prettier-compatible formatter (preferred for web)
+- **biome**: Code formatting + organizeImports (fallback)
+- **Auto-detection**: Priority: rustfmt (.rs) > oxfmt > biome
 - **Project-local resolution**: Uses `node_modules/.bin/` when available
 
 ## Installation
@@ -89,6 +90,7 @@ Add to `~/.claude/settings.json`:
 
 At least one of:
 
+- [rustfmt](https://github.com/rust-lang/rustfmt) (included with `rustup`)
 - [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (`npm i -g oxfmt`)
 - [biome](https://biomejs.dev) (`brew install biome` or `npm i -g @biomejs/biome`)
 
@@ -96,13 +98,14 @@ At least one of:
 
 | Formatter | Extensions                                                                                                                                                                  |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rustfmt   | `.rs`                                                                                                                                                                       |
 | oxfmt     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.json5` `.css` `.scss` `.less` `.html` `.vue` `.yaml` `.yml` `.toml` `.md` `.mdx` `.graphql` `.gql` |
 | biome     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.css`                                                                                               |
 
 ## How It Works
 
 1. Reads PostToolUse hook input from Claude Code (stdin JSON)
-2. Tries oxfmt first (if enabled and available), then biome as fallback
+2. Selects formatter by priority: rustfmt (.rs only) > oxfmt > biome
 
 ## Configuration
 
@@ -110,11 +113,12 @@ Place `.claude-formatter.json` at your git root. The formatter walks up from the
 
 No config file = all formatters enabled (zero-config by default).
 
-| Field              | Default | Description                       |
-| ------------------ | ------- | --------------------------------- |
-| `enabled`          | `true`  | Enable/disable formatter entirely |
-| `formatters.oxfmt` | `true`  | Enable oxfmt                      |
-| `formatters.biome` | `true`  | Enable biome                      |
+| Field                | Default | Description                       |
+| -------------------- | ------- | --------------------------------- |
+| `enabled`            | `true`  | Enable/disable formatter entirely |
+| `formatters.rustfmt` | `true`  | Enable rustfmt                    |
+| `formatters.oxfmt`   | `true`  | Enable oxfmt                      |
+| `formatters.biome`   | `true`  | Enable biome                      |
 
 ### Examples
 

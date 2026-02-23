@@ -1,15 +1,24 @@
+//! Configuration loading and merging for claude-formatter.
+//!
+//! Supports project-local `.claude-formatter.json` at the git root,
+//! with partial override semantics on top of all-enabled defaults.
+
+use crate::resolve::find_git_root;
 use serde::Deserialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+/// Runtime configuration for the formatter hook.
 pub struct Config {
     pub enabled: bool,
     pub formatters: FormattersConfig,
 }
 
+/// Per-formatter enable/disable toggles. All default to `true`.
 pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,
+    pub rustfmt: bool,
 }
 
 impl Default for FormattersConfig {
@@ -17,6 +26,7 @@ impl Default for FormattersConfig {
         Self {
             biome: true,
             oxfmt: true,
+            rustfmt: true,
         }
     }
 }
@@ -40,6 +50,7 @@ struct ProjectConfig {
 struct ProjectFormattersConfig {
     biome: Option<bool>,
     oxfmt: Option<bool>,
+    rustfmt: Option<bool>,
 }
 
 const PROJECT_CONFIG_NAME: &str = ".claude-formatter.json";
@@ -81,20 +92,17 @@ impl Config {
             if let Some(v) = pf.oxfmt {
                 self.formatters.oxfmt = v;
             }
+            if let Some(v) = pf.rustfmt {
+                self.formatters.rustfmt = v;
+            }
         }
         self
     }
 
     fn find_project_config(file_path: &str) -> Option<PathBuf> {
-        let mut dir = Path::new(file_path).parent();
-        while let Some(d) = dir {
-            if d.join(".git").exists() {
-                let candidate = d.join(PROJECT_CONFIG_NAME);
-                return candidate.exists().then_some(candidate);
-            }
-            dir = d.parent();
-        }
-        None
+        let root = find_git_root(file_path)?;
+        let candidate = root.join(PROJECT_CONFIG_NAME);
+        candidate.exists().then_some(candidate)
     }
 }
 
@@ -108,6 +116,7 @@ mod tests {
         assert!(config.enabled);
         assert!(config.formatters.biome);
         assert!(config.formatters.oxfmt);
+        assert!(config.formatters.rustfmt);
     }
 
     #[test]
@@ -195,11 +204,7 @@ mod tests {
     fn with_project_overrides_malformed_json_returns_defaults() {
         let tmp = tempfile::TempDir::new().unwrap();
         fs::create_dir_all(tmp.path().join(".git")).unwrap();
-        fs::write(
-            tmp.path().join(".claude-formatter.json"),
-            "not valid json",
-        )
-        .unwrap();
+        fs::write(tmp.path().join(".claude-formatter.json"), "not valid json").unwrap();
 
         let file_path = tmp.path().join("src/app.ts");
         let config = Config::default().with_project_overrides(file_path.to_str().unwrap());

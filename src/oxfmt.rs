@@ -1,3 +1,5 @@
+//! oxfmt formatter integration (broad language support including markup/config).
+
 use crate::resolve::resolve_bin;
 use std::path::Path;
 use std::process::Command;
@@ -79,5 +81,32 @@ mod tests {
     #[test]
     fn format_nonexistent_file_does_not_panic() {
         format("/nonexistent/path/to/file.ts");
+    }
+
+    #[test]
+    fn format_fixes_json() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let available = Command::new("oxfmt")
+            .arg("--version")
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !available {
+            eprintln!("oxfmt not available, skipping");
+            return;
+        }
+
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("test.json");
+        fs::write(&file, "{  \"a\":1,  \"b\"  :2  }\n").unwrap();
+
+        format(file.to_str().unwrap());
+
+        let content = fs::read_to_string(&file).unwrap();
+        assert!(
+            content.contains("\"a\": 1") || content.contains("\"a\":1"),
+            "Expected formatted JSON, got: {content}"
+        );
     }
 }
