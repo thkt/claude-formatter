@@ -5,6 +5,7 @@
 
 mod biome;
 mod config;
+mod eof_newline;
 mod oxfmt;
 mod resolve;
 mod rustfmt;
@@ -130,6 +131,10 @@ fn run(input_str: &str) {
                     file_path
                 );
             }
+            // For files without a language-specific formatter, ensure EOF newline.
+            if config.formatters.eof_newline {
+                eof_newline::ensure(file_path);
+            }
         }
     }
 }
@@ -199,6 +204,7 @@ mod tests {
                 biome: true,
                 oxfmt: true,
                 rustfmt: true,
+                eof_newline: true,
             },
         }
     }
@@ -218,6 +224,7 @@ mod tests {
                 biome: false,
                 oxfmt: false,
                 rustfmt: false,
+                eof_newline: true,
             },
         };
         assert_eq!(select_formatter(&config, "src/app.ts"), None);
@@ -232,6 +239,7 @@ mod tests {
                 biome: true,
                 oxfmt: false,
                 rustfmt: true,
+                eof_newline: true,
             },
         };
         assert_ne!(
@@ -248,6 +256,7 @@ mod tests {
                 biome: true,
                 oxfmt: false,
                 rustfmt: true,
+                eof_newline: true,
             },
         };
         // .yaml is oxfmt-only, biome doesn't support it
@@ -271,6 +280,7 @@ mod tests {
                 biome: true,
                 oxfmt: true,
                 rustfmt: false,
+                eof_newline: true,
             },
         };
         assert_eq!(select_formatter(&config, "src/main.rs"), None);

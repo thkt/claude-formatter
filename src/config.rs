@@ -17,6 +17,7 @@ pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,
     pub rustfmt: bool,
+    pub eof_newline: bool,
 }
 
 impl Default for FormattersConfig {
@@ -25,6 +26,7 @@ impl Default for FormattersConfig {
             biome: true,
             oxfmt: true,
             rustfmt: true,
+            eof_newline: true,
         }
     }
 }
@@ -49,6 +51,8 @@ struct ProjectFormattersConfig {
     biome: Option<bool>,
     oxfmt: Option<bool>,
     rustfmt: Option<bool>,
+    #[serde(rename = "eofNewline")]
+    eof_newline: Option<bool>,
 }
 
 const PROJECT_CONFIG_NAME: &str = ".claude-formatter.json";
@@ -93,6 +97,9 @@ impl Config {
             if let Some(v) = pf.rustfmt {
                 self.formatters.rustfmt = v;
             }
+            if let Some(v) = pf.eof_newline {
+                self.formatters.eof_newline = v;
+            }
         }
         self
     }
@@ -115,6 +122,7 @@ mod tests {
         assert!(config.formatters.biome);
         assert!(config.formatters.oxfmt);
         assert!(config.formatters.rustfmt);
+        assert!(config.formatters.eof_newline);
     }
 
     #[test]
@@ -159,6 +167,18 @@ mod tests {
         let merged = base.merge(project);
         assert!(!merged.formatters.oxfmt);
         assert!(merged.formatters.biome);
+        assert!(merged.formatters.eof_newline);
+    }
+
+    #[test]
+    fn merge_eof_newline_override() {
+        let base = Config::default();
+        let project: ProjectConfig =
+            serde_json::from_str(r#"{"formatters": {"eofNewline": false}}"#).unwrap();
+
+        let merged = base.merge(project);
+        assert!(!merged.formatters.eof_newline);
+        assert!(merged.formatters.oxfmt);
     }
 
     #[test]
