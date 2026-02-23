@@ -1,7 +1,6 @@
 //! oxfmt formatter integration (broad language support including markup/config).
 
-use crate::resolve::resolve_bin;
-use std::path::Path;
+use crate::resolve::{has_extension, resolve_bin};
 use std::process::Command;
 
 pub const EXTENSIONS: &[&str] = &[
@@ -10,10 +9,7 @@ pub const EXTENSIONS: &[&str] = &[
 ];
 
 pub fn is_formattable(path: &str) -> bool {
-    Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.contains(&e))
+    has_extension(path, EXTENSIONS)
 }
 
 pub fn is_available(file_path: &str) -> bool {
@@ -29,10 +25,12 @@ pub fn format(file_path: &str) {
     match Command::new(&oxfmt).arg(file_path).output() {
         Ok(o) if !o.status.success() => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            if !stderr.is_empty() {
+            if stderr.is_empty() {
+                eprintln!("formatter: oxfmt: exited with {}", o.status);
+            } else {
                 eprintln!(
                     "formatter: oxfmt: {}",
-                    stderr.lines().next().unwrap_or("(no details)")
+                    stderr.lines().next().unwrap_or_default()
                 );
             }
         }

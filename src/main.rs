@@ -62,6 +62,36 @@ fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
     None
 }
 
+fn validate_path(raw_path: &str) -> Option<String> {
+    let canonical = match std::path::Path::new(raw_path).canonicalize() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("formatter: cannot resolve path {}: {}", raw_path, e);
+            return None;
+        }
+    };
+
+    let cwd = match std::env::current_dir() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("formatter: cannot determine CWD: {}", e);
+            return None;
+        }
+    };
+    if !canonical.starts_with(&cwd) {
+        eprintln!("formatter: file outside project directory, skipping");
+        return None;
+    }
+
+    match canonical.to_str() {
+        Some(s) => Some(s.to_string()),
+        None => {
+            eprintln!("formatter: non-UTF-8 path, skipping");
+            None
+        }
+    }
+}
+
 fn run(input_str: &str) {
     let input: HookInput = match serde_json::from_str(input_str) {
         Ok(v) => v,
@@ -86,53 +116,32 @@ fn run(input_str: &str) {
         }
     };
 
-    let canonical = match std::path::Path::new(raw_path).canonicalize() {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("formatter: cannot resolve path {}: {}", raw_path, e);
-            return;
-        }
-    };
-
-    let cwd = match std::env::current_dir() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("formatter: cannot determine CWD: {}", e);
-            return;
-        }
-    };
-    if !canonical.starts_with(&cwd) {
-        eprintln!("formatter: file outside project directory, skipping");
-        return;
-    }
-
-    let Some(file_path) = canonical.to_str() else {
-        eprintln!("formatter: non-UTF-8 path, skipping");
+    let Some(file_path) = validate_path(raw_path) else {
         return;
     };
 
-    let config = Config::default().with_project_overrides(file_path);
+    let config = Config::default().with_project_overrides(&file_path);
     if !config.enabled {
         eprintln!("formatter: disabled by project config, skipping");
         return;
     }
 
-    match select_formatter(&config, file_path) {
-        Some(Formatter::Oxfmt) => oxfmt::format(file_path),
-        Some(Formatter::Biome) => biome::format(file_path),
-        Some(Formatter::Rustfmt) => rustfmt::format(file_path),
+    match select_formatter(&config, &file_path) {
+        Some(Formatter::Oxfmt) => oxfmt::format(&file_path),
+        Some(Formatter::Biome) => biome::format(&file_path),
+        Some(Formatter::Rustfmt) => rustfmt::format(&file_path),
         None => {
-            if rustfmt::is_formattable(file_path)
-                || oxfmt::is_formattable(file_path)
-                || biome::is_formattable(file_path)
+            if rustfmt::is_formattable(&file_path)
+                || oxfmt::is_formattable(&file_path)
+                || biome::is_formattable(&file_path)
             {
                 eprintln!(
                     "formatter: supported file but no formatter available: {}",
-                    file_path
+                    raw_path
                 );
             }
             if config.formatters.eof_newline {
-                eof_newline::ensure(file_path);
+                eof_newline::ensure(&file_path);
             }
         }
     }

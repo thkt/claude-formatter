@@ -1,7 +1,6 @@
 //! Biome formatter integration (JS/TS/JSON/CSS).
 
-use crate::resolve::resolve_bin;
-use std::path::Path;
+use crate::resolve::{has_extension, resolve_bin};
 use std::process::Command;
 
 pub const EXTENSIONS: &[&str] = &[
@@ -9,10 +8,7 @@ pub const EXTENSIONS: &[&str] = &[
 ];
 
 pub fn is_formattable(path: &str) -> bool {
-    Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.contains(&e))
+    has_extension(path, EXTENSIONS)
 }
 
 pub fn is_available(file_path: &str) -> bool {
@@ -33,7 +29,12 @@ pub fn format(file_path: &str) {
         .output()
     {
         Ok(o) if o.status.success() => return,
-        Ok(_) => {}
+        Ok(o) => {
+            eprintln!(
+                "formatter: biome: modern invocation failed (exit {}), trying legacy",
+                o.status
+            );
+        }
         Err(e) => {
             eprintln!("formatter: biome: {}", e);
             return;
@@ -46,10 +47,12 @@ pub fn format(file_path: &str) {
     {
         Ok(o) if !o.status.success() => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            if !stderr.is_empty() {
+            if stderr.is_empty() {
+                eprintln!("formatter: biome: exited with {}", o.status);
+            } else {
                 eprintln!(
                     "formatter: biome: {}",
-                    stderr.lines().next().unwrap_or("(no details)")
+                    stderr.lines().next().unwrap_or_default()
                 );
             }
         }

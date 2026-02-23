@@ -8,15 +8,19 @@ use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
+/// Top-level configuration controlling the formatter hook.
 pub struct Config {
+    /// When `false`, the hook exits without formatting.
     pub enabled: bool,
     pub formatters: FormattersConfig,
 }
 
+/// Per-formatter toggles. All default to `true`.
 pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,
     pub rustfmt: bool,
+    /// Applies to files not covered by any language-specific formatter.
     pub eof_newline: bool,
 }
 

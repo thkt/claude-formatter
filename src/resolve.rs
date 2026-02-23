@@ -4,6 +4,13 @@ use std::path::{Path, PathBuf};
 
 const MAX_TRAVERSAL_DEPTH: usize = 20;
 
+pub fn has_extension(path: &str, extensions: &[&str]) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| extensions.contains(&e))
+}
+
 pub fn find_git_root(file_path: &str) -> Option<PathBuf> {
     let stop_at = std::env::var_os("HOME").map(PathBuf::from);
     let mut dir = Path::new(file_path).parent();
@@ -53,6 +60,14 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn has_extension_matches() {
+        assert!(has_extension("src/app.ts", &["ts", "js"]));
+        assert!(!has_extension("src/app.rs", &["ts", "js"]));
+        assert!(!has_extension("Makefile", &["ts", "js"]));
+        assert!(!has_extension(".ts", &["ts"]));
+    }
 
     #[test]
     fn finds_bin_in_node_modules() {

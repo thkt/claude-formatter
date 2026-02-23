@@ -1,15 +1,12 @@
 //! rustfmt integration (.rs files). Uses global PATH (distributed via rustup).
 
-use std::path::Path;
+use crate::resolve::has_extension;
 use std::process::Command;
 
 pub const EXTENSIONS: &[&str] = &["rs"];
 
 pub fn is_formattable(path: &str) -> bool {
-    Path::new(path)
-        .extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.contains(&e))
+    has_extension(path, EXTENSIONS)
 }
 
 /// Checks global PATH — rustfmt is distributed via rustup, not node_modules.
@@ -25,10 +22,12 @@ pub fn format(file_path: &str) {
         Ok(o) if o.status.success() => {}
         Ok(o) => {
             let stderr = String::from_utf8_lossy(&o.stderr);
-            if !stderr.is_empty() {
+            if stderr.is_empty() {
+                eprintln!("formatter: rustfmt: exited with {}", o.status);
+            } else {
                 eprintln!(
                     "formatter: rustfmt: {}",
-                    stderr.lines().next().unwrap_or("(no details)")
+                    stderr.lines().next().unwrap_or_default()
                 );
             }
         }
