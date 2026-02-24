@@ -8,7 +8,6 @@ mod config;
 mod eof_newline;
 mod oxfmt;
 mod resolve;
-mod rustfmt;
 
 use config::Config;
 use serde::Deserialize;
@@ -40,17 +39,9 @@ struct ToolInput {
 enum Formatter {
     Oxfmt,
     Biome,
-    Rustfmt,
 }
 
-/// Priority: rustfmt (.rs only) > oxfmt (broad, faster) > biome (fallback).
 fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
-    if config.formatters.rustfmt
-        && rustfmt::is_formattable(file_path)
-        && rustfmt::is_available(file_path)
-    {
-        return Some(Formatter::Rustfmt);
-    }
     if config.formatters.oxfmt && oxfmt::is_formattable(file_path) && oxfmt::is_available(file_path)
     {
         return Some(Formatter::Oxfmt);
@@ -129,12 +120,8 @@ fn run(input_str: &str) {
     match select_formatter(&config, &file_path) {
         Some(Formatter::Oxfmt) => oxfmt::format(&file_path),
         Some(Formatter::Biome) => biome::format(&file_path),
-        Some(Formatter::Rustfmt) => rustfmt::format(&file_path),
         None => {
-            if rustfmt::is_formattable(&file_path)
-                || oxfmt::is_formattable(&file_path)
-                || biome::is_formattable(&file_path)
-            {
+            if oxfmt::is_formattable(&file_path) || biome::is_formattable(&file_path) {
                 eprintln!(
                     "formatter: supported file but no formatter available: {}",
                     raw_path
@@ -205,21 +192,9 @@ mod tests {
         }
     }
 
-    fn config_all_enabled() -> Config {
-        Config {
-            enabled: true,
-            formatters: config::FormattersConfig {
-                biome: true,
-                oxfmt: true,
-                rustfmt: true,
-                eof_newline: true,
-            },
-        }
-    }
-
     #[test]
     fn select_formatter_non_formattable_returns_none() {
-        let config = config_all_enabled();
+        let config = Config::default();
         assert_eq!(select_formatter(&config, "Makefile"), None);
         assert_eq!(select_formatter(&config, "Dockerfile"), None);
     }
@@ -231,12 +206,10 @@ mod tests {
             formatters: config::FormattersConfig {
                 biome: false,
                 oxfmt: false,
-                rustfmt: false,
                 eof_newline: true,
             },
         };
         assert_eq!(select_formatter(&config, "src/app.ts"), None);
-        assert_eq!(select_formatter(&config, "src/main.rs"), None);
     }
 
     #[test]
@@ -246,7 +219,6 @@ mod tests {
             formatters: config::FormattersConfig {
                 biome: true,
                 oxfmt: false,
-                rustfmt: true,
                 eof_newline: true,
             },
         };
@@ -263,35 +235,11 @@ mod tests {
             formatters: config::FormattersConfig {
                 biome: true,
                 oxfmt: false,
-                rustfmt: true,
                 eof_newline: true,
             },
         };
         // .yaml is oxfmt-only, biome doesn't support it
         assert_eq!(select_formatter(&config, "config.yaml"), None);
-    }
-
-    #[test]
-    fn select_formatter_rs_selects_rustfmt() {
-        let config = config_all_enabled();
-        assert_eq!(
-            select_formatter(&config, "src/main.rs"),
-            Some(Formatter::Rustfmt)
-        );
-    }
-
-    #[test]
-    fn select_formatter_rustfmt_disabled_returns_none_for_rs() {
-        let config = Config {
-            enabled: true,
-            formatters: config::FormattersConfig {
-                biome: true,
-                oxfmt: true,
-                rustfmt: false,
-                eof_newline: true,
-            },
-        };
-        assert_eq!(select_formatter(&config, "src/main.rs"), None);
     }
 
     #[test]

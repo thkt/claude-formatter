@@ -1,26 +1,38 @@
+**English** | [日本語](README.ja.md)
+
 # claude-formatter
 
-[日本語](README.ja.md)
-
-PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using rustfmt, oxfmt, or biome.
+PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using oxfmt or biome.
 
 ## Features
 
-- **rustfmt**: Rust source formatting (highest priority for `.rs` files)
-- **oxfmt**: Rust-powered Prettier-compatible formatter (preferred for web)
-- **biome**: Code formatting + organizeImports (fallback)
-- **Auto-detection**: Priority: rustfmt (.rs) > oxfmt > biome
+- **oxfmt integration** (priority): Rust-powered Prettier-compatible formatter from [oxc.rs](https://oxc.rs)
+- **biome integration** (fallback): Code formatting + organizeImports from [biomejs.dev](https://biomejs.dev)
+- **EOF newline**: Ensures files end with a newline (for files without a language formatter)
 - **Project-local resolution**: Uses `node_modules/.bin/` when available
 
 ## Installation
 
-### Homebrew
+### Homebrew (Recommended)
 
 ```bash
 brew install thkt/tap/formatter
 ```
 
+### From Release
+
+Download the latest binary from [Releases](https://github.com/thkt/claude-formatter/releases):
+
+```bash
+# macOS (Apple Silicon)
+curl -L https://github.com/thkt/claude-formatter/releases/latest/download/formatter-aarch64-apple-darwin -o formatter
+chmod +x formatter
+mv formatter ~/.local/bin/
+```
+
 ### From Source
+
+> **Note**: Do not clone into your project directory. The cloned repository will remain as a nested git repo and may interfere with your project's git operations.
 
 ```bash
 cd /tmp
@@ -28,6 +40,7 @@ git clone https://github.com/thkt/claude-formatter.git
 cd claude-formatter
 cargo build --release
 cp target/release/formatter ~/.local/bin/
+cd .. && rm -rf claude-formatter
 ```
 
 ## Usage
@@ -90,17 +103,25 @@ Add to `~/.claude/settings.json`:
 
 ## Requirements
 
-At least one of:
+Install at least one formatter (oxfmt is preferred):
 
-- [rustfmt](https://github.com/rust-lang/rustfmt) (included with `rustup`)
-- [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (`npm i -g oxfmt`)
-- [biome](https://biomejs.dev) (`brew install biome` or `npm i -g @biomejs/biome`)
+- [oxfmt](https://oxc.rs/docs/guide/usage/formatter) (`npm i -g oxfmt`) — **recommended**
+- [biome](https://biomejs.dev) (`brew install biome` or `npm i -g @biomejs/biome`) — fallback
+
+### Formatter Priority
+
+formatter uses **oxfmt first**. If oxfmt is not available, it falls back to biome. Only one runs per file.
+
+| Condition                            | Formatter used   |
+| ------------------------------------ | ---------------- |
+| oxfmt installed                      | oxfmt            |
+| oxfmt not installed, biome installed | biome            |
+| Neither installed                    | EOF newline only |
 
 ## Supported File Types
 
 | Formatter | Extensions                                                                                                                                                                  |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| rustfmt   | `.rs`                                                                                                                                                                       |
 | oxfmt     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.json5` `.css` `.scss` `.less` `.html` `.vue` `.yaml` `.yml` `.toml` `.md` `.mdx` `.graphql` `.gql` |
 | biome     | `.ts` `.tsx` `.js` `.jsx` `.mts` `.cts` `.mjs` `.cjs` `.json` `.jsonc` `.css`                                                                                               |
 
@@ -111,25 +132,41 @@ At least one of:
 3. Canonicalizes the file path (rejects symlink tricks, null bytes, relative paths)
 4. Verifies the file is within the current working directory
 5. Loads `.claude-formatter.json` from the git root (if present)
-6. Selects formatter by priority: rustfmt (.rs) > oxfmt > biome
+6. Selects formatter by priority: oxfmt > biome
 7. Formats the file in-place
+
+## Exit Codes
+
+| Code | Meaning |
+| ---- | ------- |
+| 0    | Always  |
+
+The formatter never blocks operations. It silently formats on success and logs errors to stderr.
 
 ## Configuration
 
-Place `.claude-formatter.json` at your git root. The formatter walks up from the target file to the nearest `.git` directory and looks for the config there. Only specified fields override defaults.
+Place `.claude-formatter.json` at your project root (next to `.git/`). All fields are optional — only specify what you want to override.
 
-No config file = all formatters enabled (zero-config by default).
+**Defaults** (no config file needed):
 
-| Field                | Default | Description                       |
-| -------------------- | ------- | --------------------------------- |
-| `enabled`            | `true`  | Enable/disable formatter entirely |
-| `formatters.rustfmt` | `true`  | Enable rustfmt                    |
-| `formatters.oxfmt`   | `true`  | Enable oxfmt                      |
-| `formatters.biome`   | `true`  | Enable biome                      |
+- All formatters enabled
+
+### Schema
+
+```json
+{
+  "enabled": true,
+  "formatters": {
+    "oxfmt": true,
+    "biome": true,
+    "eofNewline": true
+  }
+}
+```
 
 ### Examples
 
-Disable biome (use oxfmt):
+Disable biome (use oxfmt only):
 
 ```json
 {
@@ -149,17 +186,29 @@ Disable oxfmt (use biome):
 }
 ```
 
+Disable formatter for a project:
+
+```json
+{
+  "enabled": false
+}
+```
+
+### Config Resolution
+
+The config file is found by walking up from the target file to the nearest `.git` directory. If `.claude-formatter.json` exists there, it is loaded and merged with defaults.
+
+```
+project-root/          ← .git/ + .claude-formatter.json here
+├── src/
+│   └── app.ts         ← file being formatted → walks up to find config
+├── .git/
+└── .claude-formatter.json
+```
+
 ### Global config via `~/.claude`
 
 If `~/.claude` is a git repository, placing `.claude-formatter.json` there acts as a global default for all files under `~/.claude/`. Each project's own `.claude-formatter.json` takes precedence for files within that project.
-
-## Exit Codes
-
-| Code | Meaning |
-| ---- | ------- |
-| 0    | Always  |
-
-The formatter never blocks operations. It silently formats on success and logs errors to stderr.
 
 ## License
 

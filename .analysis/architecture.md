@@ -8,17 +8,15 @@
 /Users/thkt/GitHub/claude-formatter/src
 ├── biome.rs
 ├── config.rs
+├── eof_newline.rs
 ├── main.rs
 ├── oxfmt.rs
-├── resolve.rs
-└── rustfmt.rs
+└── resolve.rs
 
 1 directory, 6 files
 ```
 
 ## Entry Points
-
-
 
 ## Key Exports
 

@@ -8,19 +8,14 @@ use serde::Deserialize;
 use std::fs;
 use std::path::PathBuf;
 
-/// Top-level configuration controlling the formatter hook.
 pub struct Config {
-    /// When `false`, the hook exits without formatting.
     pub enabled: bool,
     pub formatters: FormattersConfig,
 }
 
-/// Per-formatter toggles. All default to `true`.
 pub struct FormattersConfig {
     pub biome: bool,
     pub oxfmt: bool,
-    pub rustfmt: bool,
-    /// Applies to files not covered by any language-specific formatter.
     pub eof_newline: bool,
 }
 
@@ -29,7 +24,6 @@ impl Default for FormattersConfig {
         Self {
             biome: true,
             oxfmt: true,
-            rustfmt: true,
             eof_newline: true,
         }
     }
@@ -54,7 +48,6 @@ struct ProjectConfig {
 struct ProjectFormattersConfig {
     biome: Option<bool>,
     oxfmt: Option<bool>,
-    rustfmt: Option<bool>,
     #[serde(rename = "eofNewline")]
     eof_newline: Option<bool>,
 }
@@ -98,9 +91,6 @@ impl Config {
             if let Some(v) = pf.oxfmt {
                 self.formatters.oxfmt = v;
             }
-            if let Some(v) = pf.rustfmt {
-                self.formatters.rustfmt = v;
-            }
             if let Some(v) = pf.eof_newline {
                 self.formatters.eof_newline = v;
             }
@@ -125,7 +115,6 @@ mod tests {
         assert!(config.enabled);
         assert!(config.formatters.biome);
         assert!(config.formatters.oxfmt);
-        assert!(config.formatters.rustfmt);
         assert!(config.formatters.eof_newline);
     }
 

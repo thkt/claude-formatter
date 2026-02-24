@@ -1,12 +1,10 @@
 //! EOF newline enforcement for files not covered by language-specific formatters.
 //!
 //! Handles Makefile, Dockerfile, .sh, .gitignore, and other text files that
-//! oxfmt/biome/rustfmt do not support.
+//! oxfmt/biome do not support.
 
 use std::fs;
 
-/// Returns `true` if a newline was appended, `false` if the file already
-/// ended with a newline, was empty, was binary, or could not be read/written.
 pub fn ensure(file_path: &str) -> bool {
     let content = match fs::read(file_path) {
         Ok(c) => c,
