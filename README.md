@@ -54,14 +54,14 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "formatter",
             "timeout": 2000
           }
-        ]
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ]
   }
@@ -198,7 +198,7 @@ Disable formatter for a project:
 
 The config file is found by walking up from the target file to the nearest `.git` directory. If `.claude-formatter.json` exists there, it is loaded and merged with defaults.
 
-```
+```text
 project-root/          ← .git/ + .claude-formatter.json here
 ├── src/
 │   └── app.ts         ← file being formatted → walks up to find config

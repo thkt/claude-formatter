@@ -54,14 +54,14 @@ cd .. && rm -rf claude-formatter
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "formatter",
             "timeout": 2000
           }
-        ]
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ]
   }
@@ -75,26 +75,26 @@ cd .. && rm -rf claude-formatter
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "guardrails",
             "timeout": 1000
           }
-        ]
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "formatter",
             "timeout": 2000
           }
-        ]
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ]
   }
@@ -198,7 +198,7 @@ oxfmt を無効化（biome を使用）:
 
 設定ファイルは、対象ファイルから最も近い `.git` ディレクトリまで上方向に探索されます。`.claude-formatter.json` が存在すればデフォルトとマージされます。
 
-```
+```text
 project-root/          ← .git/ + .claude-formatter.json はここ
 ├── src/
 │   └── app.ts         ← 整形対象ファイル → 上方向に設定を探索
