@@ -1,6 +1,6 @@
 # Architecture - claude-formatter
 
-> Updated: 2026-02-23T11:04:32Z | Type: rust | Frameworks: N/A
+> Updated: 2026-03-06T12:08:43Z | Type: rust | Frameworks: N/A
 
 ## Structure
 
@@ -17,6 +17,8 @@
 ```
 
 ## Entry Points
+
+
 
 ## Key Exports
 

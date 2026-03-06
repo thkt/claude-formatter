@@ -1,6 +1,6 @@
 **English** | [日本語](README.ja.md)
 
-# claude-formatter
+# formatter
 
 PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using oxfmt or biome.
 
@@ -21,11 +21,11 @@ brew install thkt/tap/formatter
 
 ### From Release
 
-Download the latest binary from [Releases](https://github.com/thkt/claude-formatter/releases):
+Download the latest binary from [Releases](https://github.com/thkt/formatter/releases):
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/thkt/claude-formatter/releases/latest/download/formatter-aarch64-apple-darwin -o formatter
+curl -L https://github.com/thkt/formatter/releases/latest/download/formatter-aarch64-apple-darwin -o formatter
 chmod +x formatter
 mv formatter ~/.local/bin/
 ```
@@ -36,11 +36,11 @@ mv formatter ~/.local/bin/
 
 ```bash
 cd /tmp
-git clone https://github.com/thkt/claude-formatter.git
-cd claude-formatter
+git clone https://github.com/thkt/formatter.git
+cd formatter
 cargo build --release
 cp target/release/formatter ~/.local/bin/
-cd .. && rm -rf claude-formatter
+cd .. && rm -rf formatter
 ```
 
 ## Usage
@@ -131,7 +131,7 @@ formatter uses **oxfmt first**. If oxfmt is not available, it falls back to biom
 2. Ignores non-Write/Edit/MultiEdit tools
 3. Canonicalizes the file path (rejects symlink tricks, null bytes, relative paths)
 4. Verifies the file is within the current working directory
-5. Loads `.claude-formatter.json` from the git root (if present)
+5. Loads config from `.claude/tools.json` or `.claude-formatter.json` (if present)
 6. Selects formatter by priority: oxfmt > biome
 7. Formats the file in-place
 
@@ -145,7 +145,9 @@ The formatter never blocks operations. It silently formats on success and logs e
 
 ## Configuration
 
-Place `.claude-formatter.json` at your project root (next to `.git/`). All fields are optional — only specify what you want to override.
+Add a `formatter` key to `.claude/tools.json` at your project root. All fields are optional — only specify what you want to override.
+
+> **Migration**: `.claude-formatter.json` at the project root is still supported as a legacy fallback. If both exist, `.claude/tools.json` takes priority.
 
 **Defaults** (no config file needed):
 
@@ -155,11 +157,13 @@ Place `.claude-formatter.json` at your project root (next to `.git/`). All field
 
 ```json
 {
-  "enabled": true,
-  "formatters": {
-    "oxfmt": true,
-    "biome": true,
-    "eofNewline": true
+  "formatter": {
+    "enabled": true,
+    "formatters": {
+      "oxfmt": true,
+      "biome": true,
+      "eofNewline": true
+    }
   }
 }
 ```
@@ -170,8 +174,10 @@ Disable biome (use oxfmt only):
 
 ```json
 {
-  "formatters": {
-    "biome": false
+  "formatter": {
+    "formatters": {
+      "biome": false
+    }
   }
 }
 ```
@@ -180,8 +186,10 @@ Disable oxfmt (use biome):
 
 ```json
 {
-  "formatters": {
-    "oxfmt": false
+  "formatter": {
+    "formatters": {
+      "oxfmt": false
+    }
   }
 }
 ```
@@ -190,25 +198,24 @@ Disable formatter for a project:
 
 ```json
 {
-  "enabled": false
+  "formatter": {
+    "enabled": false
+  }
 }
 ```
 
 ### Config Resolution
 
-The config file is found by walking up from the target file to the nearest `.git` directory. If `.claude-formatter.json` exists there, it is loaded and merged with defaults.
+The config file is found by walking up from the target file to the nearest `.git` directory. If `.claude/tools.json` exists there and contains a `formatter` key, it is loaded and merged with defaults.
 
 ```text
-project-root/          ← .git/ + .claude-formatter.json here
+project-root/          ← .git/ + .claude/tools.json here
+├── .claude/
+│   └── tools.json     ← {"formatter": {"formatters": {"oxfmt": false}}}
 ├── src/
 │   └── app.ts         ← file being formatted → walks up to find config
-├── .git/
-└── .claude-formatter.json
+└── .git/
 ```
-
-### Global config via `~/.claude`
-
-If `~/.claude` is a git repository, placing `.claude-formatter.json` there acts as a global default for all files under `~/.claude/`. Each project's own `.claude-formatter.json` takes precedence for files within that project.
 
 ## License
 

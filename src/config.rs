@@ -1,7 +1,8 @@
 //! Configuration loading and merging.
 //!
-//! Supports project-local `.claude-formatter.json` at the git root,
-//! with partial override semantics on top of all-enabled defaults.
+//! Supports `.claude/tools.json` (under the `formatter` key) at the git root,
+//! with `.claude-formatter.json` as a legacy fallback.
+//! Partial override semantics on top of all-enabled defaults.
 
 use crate::resolve::find_git_root;
 use serde::Deserialize;
@@ -52,29 +53,67 @@ struct ProjectFormattersConfig {
     eof_newline: Option<bool>,
 }
 
-const PROJECT_CONFIG_NAME: &str = ".claude-formatter.json";
+const TOOLS_CONFIG_FILE: &str = ".claude/tools.json";
+const LEGACY_CONFIG_FILE: &str = ".claude-formatter.json";
+
+#[derive(Deserialize)]
+struct ToolsConfig {
+    formatter: Option<ProjectConfig>,
+}
 
 impl Config {
     pub fn with_project_overrides(self, file_path: &str) -> Self {
-        let Some(config_path) = Self::find_project_config(file_path) else {
+        let Some(git_root) = find_git_root(file_path) else {
             return self;
         };
 
-        let content = match fs::read_to_string(&config_path) {
+        // Try .claude/tools.json first, then legacy .claude-formatter.json
+        let tools_path = git_root.join(TOOLS_CONFIG_FILE);
+        if tools_path.exists() {
+            return self.load_tools_config(&tools_path);
+        }
+
+        let legacy_path = git_root.join(LEGACY_CONFIG_FILE);
+        if legacy_path.exists() {
+            return self.load_legacy_config(&legacy_path);
+        }
+
+        self
+    }
+
+    fn load_tools_config(self, path: &PathBuf) -> Self {
+        let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!(
-                    "formatter: cannot read project config {:?}: {}",
-                    config_path, e
-                );
+                eprintln!("formatter: cannot read config {:?}: {}", path, e);
                 return self;
             }
         };
+        let tools: ToolsConfig = match serde_json::from_str(&content) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("formatter: invalid config {:?}: {}", path, e);
+                return self;
+            }
+        };
+        match tools.formatter {
+            Some(project) => self.merge(project),
+            None => self,
+        }
+    }
 
+    fn load_legacy_config(self, path: &PathBuf) -> Self {
+        let content = match fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("formatter: cannot read project config {:?}: {}", path, e);
+                return self;
+            }
+        };
         match serde_json::from_str::<ProjectConfig>(&content) {
             Ok(project) => self.merge(project),
             Err(e) => {
-                eprintln!("formatter: invalid project config {:?}: {}", config_path, e);
+                eprintln!("formatter: invalid project config {:?}: {}", path, e);
                 self
             }
         }
@@ -97,12 +136,6 @@ impl Config {
         }
         self
     }
-
-    fn find_project_config(file_path: &str) -> Option<PathBuf> {
-        let root = find_git_root(file_path)?;
-        let candidate = root.join(PROJECT_CONFIG_NAME);
-        candidate.exists().then_some(candidate)
-    }
 }
 
 #[cfg(test)]
@@ -119,36 +152,100 @@ mod tests {
     }
 
     #[test]
-    fn find_project_config_at_git_root() {
+    fn with_project_overrides_from_tools_json() {
         let tmp = tempfile::TempDir::new().unwrap();
         fs::create_dir_all(tmp.path().join(".git")).unwrap();
-        let config_path = tmp.path().join(".claude-formatter.json");
-        fs::write(&config_path, r#"{"formatters":{"oxfmt":false}}"#).unwrap();
+        fs::create_dir_all(tmp.path().join(".claude")).unwrap();
+        fs::write(
+            tmp.path().join(TOOLS_CONFIG_FILE),
+            r#"{"formatter": {"formatters":{"oxfmt":false}}}"#,
+        )
+        .unwrap();
 
         let file_path = tmp.path().join("src/app.ts");
-        let result = Config::find_project_config(file_path.to_str().unwrap());
-        assert_eq!(result, Some(config_path));
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(!config.formatters.oxfmt);
+        assert!(config.formatters.biome);
     }
 
     #[test]
-    fn find_project_config_missing_returns_none() {
+    fn with_project_overrides_from_legacy_config() {
         let tmp = tempfile::TempDir::new().unwrap();
         fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::write(
+            tmp.path().join(LEGACY_CONFIG_FILE),
+            r#"{"formatters":{"oxfmt":false}}"#,
+        )
+        .unwrap();
 
         let file_path = tmp.path().join("src/app.ts");
-        let result = Config::find_project_config(file_path.to_str().unwrap());
-        assert_eq!(result, None);
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(!config.formatters.oxfmt);
+        assert!(config.formatters.biome);
     }
 
     #[test]
-    fn find_project_config_no_git_returns_none() {
+    fn tools_json_takes_priority_over_legacy() {
         let tmp = tempfile::TempDir::new().unwrap();
-        let config_path = tmp.path().join(".claude-formatter.json");
-        fs::write(config_path, "{}").unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::create_dir_all(tmp.path().join(".claude")).unwrap();
+        fs::write(
+            tmp.path().join(TOOLS_CONFIG_FILE),
+            r#"{"formatter": {"formatters":{"oxfmt":false}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join(LEGACY_CONFIG_FILE),
+            r#"{"formatters":{"biome":false}}"#,
+        )
+        .unwrap();
 
-        let file_path = tmp.path().join("app.ts");
-        let result = Config::find_project_config(file_path.to_str().unwrap());
-        assert_eq!(result, None);
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        // tools.json wins: oxfmt=false, biome stays default (true)
+        assert!(!config.formatters.oxfmt);
+        assert!(config.formatters.biome);
+    }
+
+    #[test]
+    fn tools_json_without_formatter_key_returns_defaults() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::create_dir_all(tmp.path().join(".claude")).unwrap();
+        fs::write(
+            tmp.path().join(TOOLS_CONFIG_FILE),
+            r#"{"reviews": {"some": "config"}}"#,
+        )
+        .unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(config.formatters.biome);
+        assert!(config.formatters.oxfmt);
+    }
+
+    #[test]
+    fn with_project_overrides_no_git_returns_unchanged() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(config.formatters.biome);
+        assert!(config.formatters.oxfmt);
+    }
+
+    #[test]
+    fn with_project_overrides_malformed_json_returns_defaults() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join(".git")).unwrap();
+        fs::create_dir_all(tmp.path().join(".claude")).unwrap();
+        fs::write(tmp.path().join(TOOLS_CONFIG_FILE), "not valid json").unwrap();
+
+        let file_path = tmp.path().join("src/app.ts");
+        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
+        assert!(config.enabled);
+        assert!(config.formatters.biome);
+        assert!(config.formatters.oxfmt);
     }
 
     #[test]
@@ -193,44 +290,5 @@ mod tests {
         assert!(merged.enabled);
         assert!(merged.formatters.biome);
         assert!(merged.formatters.oxfmt);
-    }
-
-    #[test]
-    fn with_project_overrides_applies_config() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        fs::create_dir_all(tmp.path().join(".git")).unwrap();
-        fs::write(
-            tmp.path().join(".claude-formatter.json"),
-            r#"{"formatters":{"oxfmt":false}}"#,
-        )
-        .unwrap();
-
-        let file_path = tmp.path().join("src/app.ts");
-        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
-        assert!(!config.formatters.oxfmt);
-        assert!(config.formatters.biome);
-    }
-
-    #[test]
-    fn with_project_overrides_malformed_json_returns_defaults() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        fs::create_dir_all(tmp.path().join(".git")).unwrap();
-        fs::write(tmp.path().join(".claude-formatter.json"), "not valid json").unwrap();
-
-        let file_path = tmp.path().join("src/app.ts");
-        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
-        assert!(config.enabled);
-        assert!(config.formatters.biome);
-        assert!(config.formatters.oxfmt);
-    }
-
-    #[test]
-    fn with_project_overrides_no_config_returns_unchanged() {
-        let tmp = tempfile::TempDir::new().unwrap();
-
-        let file_path = tmp.path().join("src/app.ts");
-        let config = Config::default().with_project_overrides(file_path.to_str().unwrap());
-        assert!(config.formatters.biome);
-        assert!(config.formatters.oxfmt);
     }
 }
