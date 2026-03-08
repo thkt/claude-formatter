@@ -13,7 +13,22 @@ PostToolUse hook for Claude Code. Auto-formats files after Write/Edit using oxfm
 
 ## Installation
 
-### Homebrew (Recommended)
+### Claude Code Plugin (Recommended)
+
+Installs the binary and registers the hook automatically:
+
+```bash
+claude plugins marketplace add github:thkt/formatter
+claude plugins install formatter
+```
+
+If the binary is not yet installed, run the bundled installer:
+
+```bash
+~/.claude/plugins/cache/formatter/formatter/*/hooks/install.sh
+```
+
+### Homebrew
 
 ```bash
 brew install thkt/tap/formatter
@@ -25,14 +40,11 @@ Download the latest binary from [Releases](https://github.com/thkt/formatter/rel
 
 ```bash
 # macOS (Apple Silicon)
-curl -L https://github.com/thkt/formatter/releases/latest/download/formatter-aarch64-apple-darwin -o formatter
-chmod +x formatter
+curl -L https://github.com/thkt/formatter/releases/latest/download/formatter-aarch64-apple-darwin.tar.gz | tar xz
 mv formatter ~/.local/bin/
 ```
 
 ### From Source
-
-> **Note**: Do not clone into your project directory. The cloned repository will remain as a nested git repo and may interfere with your project's git operations.
 
 ```bash
 cd /tmp
@@ -47,7 +59,7 @@ cd .. && rm -rf formatter
 
 ### As Claude Code Hook
 
-Add to `~/.claude/settings.json`:
+When installed as a plugin, hooks are registered automatically. For manual setup, add to `~/.claude/settings.json`:
 
 ```json
 {
