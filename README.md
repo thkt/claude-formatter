@@ -229,6 +229,15 @@ project-root/          ← .git/ + .claude/tools.json here
 └── .git/
 ```
 
+## Related Tools
+
+| Tool | Hook | Timing | Role |
+| --- | --- | --- | --- |
+| [guardrails](https://github.com/thkt/guardrails) | PreToolUse | Before Write/Edit | Lint + security checks |
+| **formatter** | PostToolUse | After Write/Edit | Auto code formatting |
+| [reviews](https://github.com/thkt/reviews) | PreToolUse | Review Skill execution | Static analysis context |
+| [gates](https://github.com/thkt/gates) | Stop | Agent completion | Quality gates (knip, tsgo, madge) |
+
 ## License
 
 MIT
