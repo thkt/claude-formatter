@@ -171,11 +171,9 @@ Add a `formatter` key to `.claude/tools.json` at your project root. All fields a
 {
   "formatter": {
     "enabled": true,
-    "formatters": {
-      "oxfmt": true,
-      "biome": true,
-      "eofNewline": true
-    }
+    "oxfmt": true,
+    "biome": true,
+    "eofNewline": true
   }
 }
 ```
@@ -187,9 +185,7 @@ Disable biome (use oxfmt only):
 ```json
 {
   "formatter": {
-    "formatters": {
-      "biome": false
-    }
+    "biome": false
   }
 }
 ```
@@ -199,9 +195,7 @@ Disable oxfmt (use biome):
 ```json
 {
   "formatter": {
-    "formatters": {
-      "oxfmt": false
-    }
+    "oxfmt": false
   }
 }
 ```
@@ -223,7 +217,7 @@ The config file is found by walking up from the target file to the nearest `.git
 ```text
 project-root/          ← .git/ + .claude/tools.json here
 ├── .claude/
-│   └── tools.json     ← {"formatter": {"formatters": {"oxfmt": false}}}
+│   └── tools.json     ← {"formatter": {"oxfmt": false}}
 ├── src/
 │   └── app.ts         ← file being formatted → walks up to find config
 └── .git/

@@ -53,11 +53,6 @@ impl Default for Config {
 #[derive(Deserialize)]
 struct ProjectConfig {
     enabled: Option<bool>,
-    formatters: Option<ProjectFormattersConfig>,
-}
-
-#[derive(Deserialize)]
-struct ProjectFormattersConfig {
     biome: Option<bool>,
     oxfmt: Option<bool>,
     #[serde(rename = "eofNewline")]
@@ -110,16 +105,14 @@ impl Config {
         if let Some(enabled) = project.enabled {
             self.enabled = enabled;
         }
-        if let Some(pf) = project.formatters {
-            if let Some(v) = pf.biome {
-                self.formatters.biome = v;
-            }
-            if let Some(v) = pf.oxfmt {
-                self.formatters.oxfmt = v;
-            }
-            if let Some(v) = pf.eof_newline {
-                self.formatters.eof_newline = v;
-            }
+        if let Some(v) = project.biome {
+            self.formatters.biome = v;
+        }
+        if let Some(v) = project.oxfmt {
+            self.formatters.oxfmt = v;
+        }
+        if let Some(v) = project.eof_newline {
+            self.formatters.eof_newline = v;
         }
         self
     }
@@ -141,8 +134,7 @@ mod tests {
     #[test]
     fn merge_partial_formatters_override() {
         let base = Config::default();
-        let project: ProjectConfig =
-            serde_json::from_str(r#"{"formatters": {"oxfmt": false}}"#).unwrap();
+        let project: ProjectConfig = serde_json::from_str(r#"{"oxfmt": false}"#).unwrap();
 
         let merged = base.merge(project);
         assert!(!merged.formatters.oxfmt);
@@ -153,8 +145,7 @@ mod tests {
     #[test]
     fn merge_eof_newline_override() {
         let base = Config::default();
-        let project: ProjectConfig =
-            serde_json::from_str(r#"{"formatters": {"eofNewline": false}}"#).unwrap();
+        let project: ProjectConfig = serde_json::from_str(r#"{"eofNewline": false}"#).unwrap();
 
         let merged = base.merge(project);
         assert!(!merged.formatters.eof_newline);
@@ -216,7 +207,7 @@ mod tests {
         let tmp = tmp_repo_with_claude();
         fs::write(
             tmp.path().join(TOOLS_CONFIG_FILE),
-            r#"{"formatter": {"formatters":{"oxfmt":false}}}"#,
+            r#"{"formatter": {"oxfmt":false}}"#,
         )
         .unwrap();
 
