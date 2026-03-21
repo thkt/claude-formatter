@@ -11,9 +11,9 @@ pub fn has_extension(path: &str, extensions: &[&str]) -> bool {
         .is_some_and(|e| extensions.contains(&e))
 }
 
-pub fn find_git_root(file_path: &str) -> Option<PathBuf> {
+pub fn find_git_root_from_dir(start: &Path) -> Option<PathBuf> {
     let stop_at = std::env::var_os("HOME").map(PathBuf::from);
-    let mut dir = Path::new(file_path).parent();
+    let mut dir = Some(start);
     let mut depth = 0;
     while let Some(d) = dir {
         if depth >= MAX_TRAVERSAL_DEPTH {
@@ -142,6 +142,35 @@ mod tests {
         let result = resolve_bin("biome", file_path.to_str().unwrap());
         // Path::parent() doesn't resolve symlinks, so won't find project's node_modules
         assert_eq!(result, PathBuf::from("biome"));
+    }
+
+    // [T-014] find_git_root_from_dir finds git root in current directory
+    #[test]
+    fn t_014_find_git_root_from_dir_finds_root() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+
+        let result = find_git_root_from_dir(tmp.path());
+        assert_eq!(result, Some(tmp.path().to_path_buf()));
+    }
+
+    // [T-015] find_git_root_from_dir returns None without .git
+    #[test]
+    fn t_015_find_git_root_from_dir_none_without_git() {
+        let tmp = TempDir::new().unwrap();
+        assert_eq!(find_git_root_from_dir(tmp.path()), None);
+    }
+
+    // [T-016] find_git_root_from_dir finds git root from deep subdirectory
+    #[test]
+    fn t_016_find_git_root_from_dir_deep_subdir() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+        let deep = tmp.path().join("src/components/ui");
+        fs::create_dir_all(&deep).unwrap();
+
+        let result = find_git_root_from_dir(&deep);
+        assert_eq!(result, Some(tmp.path().to_path_buf()));
     }
 
     #[test]
