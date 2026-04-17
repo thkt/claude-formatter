@@ -5,8 +5,10 @@
 
 use crate::resolve::find_git_root_from_dir;
 use serde::Deserialize;
+use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, PartialEq)]
 pub enum ConfigSource {
@@ -68,15 +70,12 @@ struct ToolsConfig {
 
 impl Config {
     pub fn with_project_overrides(self) -> Result<Self, String> {
-        let cwd = std::env::current_dir()
-            .map_err(|e| format!("cannot determine working directory: {}", e))?;
+        let cwd =
+            env::current_dir().map_err(|e| format!("cannot determine working directory: {}", e))?;
         self.with_overrides_from_root(&cwd)
     }
 
-    pub(crate) fn with_overrides_from_root(
-        mut self,
-        start: &std::path::Path,
-    ) -> Result<Self, String> {
+    pub(crate) fn with_overrides_from_root(mut self, start: &Path) -> Result<Self, String> {
         let Some(git_root) = find_git_root_from_dir(start) else {
             return Ok(self);
         };
@@ -88,10 +87,10 @@ impl Config {
                 let tools: ToolsConfig = serde_json::from_str(&content)
                     .map_err(|e| format!("invalid config {:?}: {}", tools_path, e))?;
                 if let Some(project) = tools.formatter {
-                    return Ok(self.merge(project));
+                    return Ok(self.merge(&project));
                 }
             }
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
                 return Err(format!("cannot read config {:?}: {}", tools_path, e));
             }
             Err(_) => {}
@@ -100,7 +99,7 @@ impl Config {
         Ok(self)
     }
 
-    fn merge(mut self, project: ProjectConfig) -> Self {
+    fn merge(mut self, project: &ProjectConfig) -> Self {
         self.source = ConfigSource::Explicit;
         if let Some(enabled) = project.enabled {
             self.enabled = enabled;
@@ -136,7 +135,7 @@ mod tests {
         let base = Config::default();
         let project: ProjectConfig = serde_json::from_str(r#"{"oxfmt": false}"#).unwrap();
 
-        let merged = base.merge(project);
+        let merged = base.merge(&project);
         assert!(!merged.formatters.oxfmt);
         assert!(merged.formatters.biome);
         assert!(merged.formatters.eof_newline);
@@ -147,7 +146,7 @@ mod tests {
         let base = Config::default();
         let project: ProjectConfig = serde_json::from_str(r#"{"eofNewline": false}"#).unwrap();
 
-        let merged = base.merge(project);
+        let merged = base.merge(&project);
         assert!(!merged.formatters.eof_newline);
         assert!(merged.formatters.oxfmt);
     }
@@ -157,7 +156,7 @@ mod tests {
         let base = Config::default();
         let project: ProjectConfig = serde_json::from_str(r#"{"enabled": false}"#).unwrap();
 
-        let merged = base.merge(project);
+        let merged = base.merge(&project);
         assert!(!merged.enabled);
         assert!(merged.formatters.biome);
     }
@@ -167,7 +166,7 @@ mod tests {
         let base = Config::default();
         let project: ProjectConfig = serde_json::from_str(r#"{}"#).unwrap();
 
-        let merged = base.merge(project);
+        let merged = base.merge(&project);
         assert!(merged.enabled);
         assert!(merged.formatters.biome);
         assert!(merged.formatters.oxfmt);
@@ -197,7 +196,7 @@ mod tests {
     fn t_002_merge_sets_explicit_source() {
         let base = Config::default();
         let project: ProjectConfig = serde_json::from_str(r#"{}"#).unwrap();
-        let merged = base.merge(project);
+        let merged = base.merge(&project);
         assert_eq!(merged.source, ConfigSource::Explicit);
     }
 
