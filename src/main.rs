@@ -12,7 +12,9 @@ mod resolve;
 
 use config::{Config, ConfigSource};
 use serde::Deserialize;
+use std::env;
 use std::io::{self, Read};
+use std::path::Path;
 
 const MAX_INPUT_SIZE: u64 = 10_000_000;
 
@@ -55,7 +57,7 @@ fn select_formatter(config: &Config, file_path: &str) -> Option<Formatter> {
 }
 
 fn validate_path(raw_path: &str) -> Option<String> {
-    let canonical = match std::path::Path::new(raw_path).canonicalize() {
+    let canonical = match Path::new(raw_path).canonicalize() {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Formatter: cannot resolve path {}: {}", raw_path, e);
@@ -63,7 +65,7 @@ fn validate_path(raw_path: &str) -> Option<String> {
         }
     };
 
-    let cwd = match std::env::current_dir() {
+    let cwd = match env::current_dir() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Formatter: cannot determine CWD: {}", e);
@@ -76,7 +78,7 @@ fn validate_path(raw_path: &str) -> Option<String> {
     }
 
     match canonical.to_str() {
-        Some(s) => Some(s.to_string()),
+        Some(s) => Some(s.to_owned()),
         None => {
             eprintln!("Formatter: non-UTF-8 path, skipping");
             None
@@ -84,8 +86,7 @@ fn validate_path(raw_path: &str) -> Option<String> {
     }
 }
 
-const CONFIG_HINT_MESSAGE: &str =
-    "Formatter: using defaults. Customize via .claude/tools.json \u{2014} see https://github.com/thkt/formatter#configuration";
+const CONFIG_HINT_MESSAGE: &str = "Formatter: using defaults. Customize via .claude/tools.json \u{2014} see https://github.com/thkt/formatter#configuration";
 
 fn show_config_hint(config: &Config) {
     if config.git_root.is_none() || config.source != ConfigSource::Default {
@@ -170,6 +171,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn deserialize_known_tool_names() {
@@ -288,7 +290,7 @@ mod tests {
         run(r#"{"tool_name": "Write", "tool_input": {"file_path": "/nonexistent/path.ts"}}"#);
     }
 
-    fn make_config(source: ConfigSource, git_root: Option<std::path::PathBuf>) -> Config {
+    fn make_config(source: ConfigSource, git_root: Option<PathBuf>) -> Config {
         Config {
             enabled: true,
             formatters: config::FormattersConfig {
